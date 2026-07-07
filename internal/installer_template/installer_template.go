@@ -31,61 +31,100 @@ type Data struct {
 }
 
 const tmplSource = `#!/usr/bin/env bash
-# Freshy installer for package: {{.Pkg}}
+# ═══════════════════════════════════════════════════════════
+# Freshy installer for: {{.Pkg}}
+# ═══════════════════════════════════════════════════════════
 #
-# Repo:    {{.Repo}} (branch {{.Branch}})
-# Binaries (must exist at cwd with +x bit when this script exits 0):
+# Repo:    {{.Repo}}
+# Branch:  {{.Branch}}
+#
+# This script runs AFTER git pull. Its job is to BUILD the
+# project so that the files below appear in the current folder:
 {{- range .Binaries}}
-#   - {{.}}
+#   ☐ {{.}}
 {{- end}}
 #
-# Runtime contract:
-#   * cwd is the cloned repo root.
-#   * exit 0  -> freshy atomically swaps the binaries listed above
-#                  into your PATH (settings.install_to).
-#   * exit != -> freshy leaves the previous binary untouched and
-#                  records the error in freshy logs.
+# Current folder (= cwd) at runtime: the cloned repo root.
+# The files listed above will be atomically copied into your
+# PATH (~/.local/bin) by freshy when this script exits 0.
 #
-# This file was generated from a template; edit freely. To re-edit:
-#   freshy add {{.Repo}}   # (will detect existing installer and ask)
+# ── How to use this template ─────────────────────────────
+# 1. Pick your project's build tool below.
+# 2. UNCOMMENT the lines that apply.
+# 3. Replace placeholder names (like "myapp") with real ones.
+# 4. SAVE and close. Then run:  freshy sync {{.Pkg}}
 #
-# Suggested location: {{.InstallerPath}}
+# File location: {{.InstallerPath}}
+# ═══════════════════════════════════════════════════════════
 
 set -euo pipefail
 
-# --- begin {{.Pkg}} build steps ----------------------------------
-#
-# Replace the body of this block with whatever produces {{range .Binaries}}{{.}}, {{end}}
-# in cwd. Common shapes:
-#
-#   * make-based C/Rust/Go projects:
-#       make            # writes ./your-bin
-#
-#   * cargo (Rust):
-#       cargo build --release
-#       cp target/release/{{index .Binaries 0}} {{index .Binaries 0}}
-#
-#   * npm/node:
-#       npm ci
-#       npm run build
-#       # whatever produces the binary ends up in ./node_modules/.bin
-#         or in your build/ output — symlink or copy to cwd
-#
-# Keep the binary name(s) identical to the ones declared above so
-# freshy's deploy step knows what to ship.
+echo "▶ [{{.Pkg}} installer] building…"
 
-echo "[{{.Pkg}} installer] building…" >&2
-# TODO: replace this with your build commands
-for b in {{range .Binaries}} {{.}}{{end}}; do
-    if [[ ! -x "$b" ]]; then
-        echo "[{{.Pkg}} installer] missing or non-executable: $b" >&2
-        exit 2
+# ═══════════════════════════════════════════════════════════
+# ▼▼▼  EDIT BELOW  ▼▼▼
+# ═══════════════════════════════════════════════════════════
+#
+# Uncomment ONE block below that matches your project.
+# Delete or comment out the others.
+#
+# ──────────────────────────────────────────────────────────
+# Option A: Rust / Cargo
+# ──────────────────────────────────────────────────────────
+# cargo build --release
+# cp target/release/{{index .Binaries 0}} {{index .Binaries 0}}
+
+# ──────────────────────────────────────────────────────────
+# Option B: Go
+# ──────────────────────────────────────────────────────────
+# go build -o {{index .Binaries 0}} .
+
+# ──────────────────────────────────────────────────────────
+# Option C: Make / Autotools
+# ──────────────────────────────────────────────────────────
+# make
+# cp build/{{index .Binaries 0}} {{index .Binaries 0}}
+
+# ──────────────────────────────────────────────────────────
+# Option D: Node.js / npm
+# ──────────────────────────────────────────────────────────
+# npm ci
+# npm run build
+# cp node_modules/.bin/{{index .Binaries 0}} {{index .Binaries 0}}
+
+# ──────────────────────────────────────────────────────────
+# Option E: Python / pip
+# ──────────────────────────────────────────────────────────
+# pip install .
+# # or: python setup.py build
+# cp $(which {{index .Binaries 0}}) {{index .Binaries 0}}
+
+# ──────────────────────────────────────────────────────────
+# Option F: Anything else — write your own commands below
+# ──────────────────────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════
+# ▲▲▲  EDIT ABOVE  ▲▲▲
+# ═══════════════════════════════════════════════════════════
+
+# ── Post-build check ─────────────────────────────────────
+# freshy checks that the expected files exist and are executable.
+# If a file is missing, the installer FAILS and freshy keeps
+# your previous version (no broken update).
+FAILED=0
+for f in{{range .Binaries}} {{.}}{{end}}; do
+    if [[ ! -x "$f" ]]; then
+        echo "✗ [{{.Pkg}} installer] MISSING: $f (not found or not executable)" >&2
+        FAILED=1
     fi
 done
 
-# --- end {{.Pkg}} build steps ------------------------------------
+if [ "$FAILED" -ne 0 ]; then
+    echo "✗ [{{.Pkg}} installer] build failed — previous binary kept" >&2
+    exit 2
+fi
 
-echo "[{{.Pkg}} installer] build OK" >&2
+echo "✓ [{{.Pkg}} installer] build OK — freshy will deploy now"
 `
 
 // tmpl is parsed lazily; we keep it in init() so a malformed template
