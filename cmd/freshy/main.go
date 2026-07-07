@@ -70,6 +70,8 @@ func main() {
 	cmd, args := os.Args[1], os.Args[2:]
 	var err error
 	switch cmd {
+	case "config":
+		err = cmdConfig(args)
 	case "init":
 		err = cmdInit()
 	case "sync":
@@ -114,11 +116,48 @@ Commands:
   add <repo-url>       Interactively add a package to the config
   remove <pkg>         Uninstall a package + drop it from config
   uninstall <pkg>      Alias for remove
+  config edit          Open the config file in $EDITOR
   logs [-f] [-n N]     Show the log (default: last 50 lines; -f to follow)
   doctor               Sanity-check config, paths, systemd units
   version              Print version
 
 Run 'freshy <command> -h' for command-specific help.`)
+}
+
+// ─────────────────────────── config ────────────────────────────
+
+func cmdConfig(args []string) error {
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Fprintln(os.Stderr, `Usage: freshy config <subcommand>
+
+Subcommands:
+  edit    Open the config file in $EDITOR
+
+Run 'freshy config <subcommand> -h' for subcommand-specific help.`)
+		if len(args) == 0 {
+			return errors.New("missing subcommand")
+		}
+		return nil
+	}
+	sub, subArgs := args[0], args[1:]
+	switch sub {
+	case "edit":
+		return cmdConfigEdit(subArgs)
+	default:
+		return fmt.Errorf("unknown config subcommand %q", sub)
+	}
+}
+
+func cmdConfigEdit(_ []string) error {
+	cfgPath, err := config.DefaultPath()
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(cfgPath); err != nil {
+		return fmt.Errorf("config not found at %s; run `freshy init` first", cfgPath)
+	}
+	fmt.Fprintf(os.Stderr, "opening %s …\n", cfgPath)
+	return editor.Open(cfgPath)
 }
 
 // ─────────────────────────── init ───────────────────────────
