@@ -154,3 +154,4 @@ Layout (Go package structure):
 - No notifications on failure yet. Watch `freshy status` or
   `journalctl --user -u freshy.service`.
 - Pre/post-deploy hooks are not implemented.
+<!-- self-update smoke marker: 2026-07-07 -->
