@@ -31,6 +31,8 @@ import (
 	"time"
 
 	"github.com/poodbooq/freshy/internal/config"
+	"github.com/poodbooq/freshy/internal/editor"
+	"github.com/poodbooq/freshy/internal/installer_template"
 	"github.com/poodbooq/freshy/internal/logger"
 	"github.com/poodbooq/freshy/internal/paths"
 	"github.com/poodbooq/freshy/internal/state"
@@ -453,23 +455,81 @@ func cmdAdd(args []string) error {
 	}
 
 	branch := promptOrDefault("branch", "main")
-	installer := promptOrDefault(
-		"installer (absolute path or ~/-prefixed path to a local shell script)",
-		"~/.local/share/freshy/installers/"+name+".sh",
-	)
 	bins := promptOrDefault("binary names (comma-separated within repo root)", name)
+	binaryList := splitCSV(bins)
+	if len(binaryList) == 0 {
+		return fmt.Errorf("at least one binary name is required")
+	}
+
+	// Resolve the canonical installer path. If it already exists,
+	// the user is probably re-running add to refresh an existing
+	// package — open it in $EDITOR instead of generating a fresh
+	// template. We surface that choice when the path exists AND
+	// the user is non-interactive — but here we assume a TTY.
+	instPath, err := paths.InstallerFile(name)
+	if err != nil {
+		return err
+	}
+
+	reuseExisting := false
+	if _, err := os.Stat(instPath); err == nil {
+		fmt.Fprintf(os.Stderr, "installer already exists at %s; opening for editing (Ctrl-C to abort)\n", instPath)
+		reuseExisting = true
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	// Materialize the file (template or path-only).
+	if !reuseExisting {
+		rendered, err := installer_template.Render(installer_template.Data{
+			Pkg:           name,
+			Repo:          repo,
+			Branch:        branch,
+			Binaries:      binaryList,
+			InstallerPath: instPath,
+		})
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(instPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(instPath, []byte(rendered), 0o644); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "wrote template to %s\n", instPath)
+	}
+
+	// Hand off to the user's editor.
+	if err := editor.Open(instPath); err != nil {
+		return fmt.Errorf("editor exited: %w", err)
+	}
+
+	// Sanity: the file must exist and be non-empty after editing.
+	st, err := os.Stat(instPath)
+	if err != nil {
+		return err
+	}
+	if st.Size() == 0 {
+		return fmt.Errorf("installer is empty (%s); nothing to do", instPath)
+	}
+	if err := os.Chmod(instPath, 0o755); err != nil {
+		return err
+	}
 
 	cfg.Packages = append(cfg.Packages, config.Package{
 		Name:      name,
 		Repo:      repo,
 		Branch:    branch,
-		Installer: installer,
-		Binaries:  splitCSV(bins),
+		Installer: instPath,
+		Binaries:  binaryList,
 	})
 	if err := cfg.Save(cfgPath); err != nil {
 		return err
 	}
 	fmt.Printf("✓ added %q to %s\n", name, cfgPath)
+	fmt.Printf("  installer: %s\n", instPath)
+	fmt.Printf("  next:      freshy sync %s\n", name)
 	return nil
 }
 
