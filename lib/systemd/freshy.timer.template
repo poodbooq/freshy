@@ -1,0 +1,12 @@
+[Unit]
+Description=Freshy periodic sync timer
+
+[Timer]
+Persistent=true
+OnBootSec=2min
+OnUnitActiveSec={{.Schedule}}
+AccuracySec=30s
+Unit=freshy.service
+
+[Install]
+WantedBy=timers.target

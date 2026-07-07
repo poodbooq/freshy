@@ -1,0 +1,34 @@
+# Example freshy configuration. Copy to ~/.config/freshy/config.toml
+# and edit. See README.md for the full schema.
+
+config_version = 1
+
+[settings]
+# systemd-style duration for the periodic timer.
+schedule     = "6h"
+parallel     = 4
+log_path     = "~/.local/share/freshy/logs/freshy.log"
+install_to   = "~/.local/bin"
+prune_builds = true
+
+# Each [[packages]] entry declares one tool to keep fresh.
+# `binaries` are the files produced by `install_script` and copied
+# (after a successful install) into `settings.install_to`.
+
+# ripgrep ships a scripts/install.sh that builds and copies to PREFIX.
+[[packages]]
+name           = "ripgrep"
+repo           = "https://github.com/BurntSushi/ripgrep.git"
+branch         = "master"
+install_script = "scripts/install.sh"
+binaries       = ["rg"]
+
+# sharkdp/bat has no in-tree install.sh, but you can wire one through
+# to cargo. Drop a `scripts/install.sh` into your fork first, OR use
+# this as a placeholder showing the pattern:
+# [[packages]]
+# name           = "bat"
+# repo           = "https://github.com/sharkdp/bat.git"
+# branch         = "master"
+# install_script = "scripts/install.sh"  # you ship this in your fork
+# binaries       = ["bat"]			
