@@ -112,6 +112,26 @@ func BuildsDir() (string, error) {
 	return filepath.Join(d, "builds"), nil
 }
 
+// InstallersDir returns the per-user directory holding local install
+// scripts that have been auto-migrated out of upstream repositories,
+// or hand-written by the user.
+func InstallersDir() (string, error) {
+	d, err := DataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, "installers"), nil
+}
+
+// InstallerFile returns the canonical local-script path for one pkg.
+func InstallerFile(pkg string) (string, error) {
+	d, err := InstallersDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, pkg+".sh"), nil
+}
+
 // LogsDir returns the log directory.
 func LogsDir() (string, error) {
 	d, err := DataDir()

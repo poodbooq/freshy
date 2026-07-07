@@ -49,11 +49,11 @@ tool you want to track:
 
 ```toml
 [[packages]]
-name           = "rg"
-repo           = "https://github.com/BurntSushi/ripgrep.git"
-branch         = "master"
-install_script = "scripts/install.sh"
-binaries       = ["rg"]
+name      = "rg"
+repo      = "https://github.com/BurntSushi/ripgrep.git"
+branch    = "master"
+installer = "~/.local/share/freshy/installers/rg.sh"   # local shell script you own
+binaries  = ["rg"]
 ```
 
 Use `freshy add <repo-url>` for a guided interactive add.
@@ -77,9 +77,9 @@ Use `freshy add <repo-url>` for a guided interactive add.
 2. Otherwise → `git fetch` + `git merge --ff-only`. A non-fast-forward
    pull is logged and skipped (your local divergence is preserved).
 3. Compare the new `HEAD` SHA to `state.last_sha`. If they match → done.
-4. Run `install_script` with the repo as cwd. Capture stdout/stderr to
-   the log file.
-5. If the script exits non-zero → log the error and **do not** touch
+4. Run the package's **local** installer (path in `installer` field,
+   cwd = repo root) and capture stdout/stderr to the log file.
+5. If the installer exits non-zero → log the error and **do not** touch
    `PATH`. The previous binary remains in place.
 6. Otherwise → stage each declared binary under
    `~/.local/share/freshy/builds/<pkg>/`, verify (non-empty, executable
@@ -96,6 +96,7 @@ Use `freshy add <repo-url>` for a guided interactive add.
   state/<pkg>.json                           # per-package state
   repos/<pkg>/                               # git clones
   builds/<pkg>/                              # staged binaries (pruned)
+  installers/<pkg>.sh                        # local installer scripts
   logs/freshy.log                            # text log
 ~/.local/bin/<binary>                        # PATH target
 ~/.config/systemd/user/freshy.{service,timer}

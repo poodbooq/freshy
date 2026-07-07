@@ -52,11 +52,11 @@ install_to   = "~/.local/bin"
 prune_builds = true
 
 # [[packages]]
-# name           = "example"
-# repo           = "https://github.com/you/example.git"  # or git@github.com:...
-# branch         = "main"
-# install_script = "scripts/install.sh"
-# binaries       = ["example"]
+# name       = "example"
+# repo       = "https://github.com/you/example.git"  # or git@github.com:...
+# branch     = "main"
+# installer  = "~/.local/share/freshy/installers/example.sh"  # local shell script
+# binaries   = ["example"]
 `
 )
 
@@ -448,15 +448,18 @@ func cmdAdd(args []string) error {
 	}
 
 	branch := promptOrDefault("branch", "main")
-	script := promptOrDefault("install script (path inside repo)", "scripts/install.sh")
+	installer := promptOrDefault(
+		"installer (absolute path or ~/-prefixed path to a local shell script)",
+		"~/.local/share/freshy/installers/"+name+".sh",
+	)
 	bins := promptOrDefault("binary names (comma-separated within repo root)", name)
 
 	cfg.Packages = append(cfg.Packages, config.Package{
-		Name:          name,
-		Repo:          repo,
-		Branch:        branch,
-		InstallScript: script,
-		Binaries:      splitCSV(bins),
+		Name:      name,
+		Repo:      repo,
+		Branch:    branch,
+		Installer: installer,
+		Binaries:  splitCSV(bins),
 	})
 	if err := cfg.Save(cfgPath); err != nil {
 		return err

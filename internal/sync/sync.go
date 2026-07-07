@@ -177,7 +177,7 @@ func (r *Runner) runOne(ctx context.Context, p config.Package, lockFor func(stri
 	}
 
 	// Step 4: install.
-	if err := runInstallScript(ctx, log, p, repoDir); err != nil {
+	if err := runInstaller(ctx, log, p, repoDir); err != nil {
 		log.Errorf("[%s] install: %v", p.Name, err)
 		st.RecordError(err.Error())
 		_ = st.Save()
@@ -288,13 +288,31 @@ func isAlreadyUpToDate(out []byte) bool {
 	return strings.Contains(string(out), "Already up to date")
 }
 
-func runInstallScript(ctx context.Context, log *logger.Logger, p config.Package, repoDir string) error {
-	script := filepath.Join(repoDir, p.InstallScript)
-	if _, err := os.Stat(script); err != nil {
-		return fmt.Errorf("install script %s: %w", p.InstallScript, err)
+// runInstaller resolves the package's installer script and executes
+// it with cwd = repo root. The script path is user-controlled (set in
+// `settings.installer` per package); it may live anywhere on disk.
+func runInstaller(ctx context.Context, log *logger.Logger, p config.Package, repoDir string) error {
+	script := p.Installer
+	if script == "" {
+		return fmt.Errorf("no installer configured for %s", p.Name)
 	}
-	log.Infof("[%s] running %s", p.Name, p.InstallScript)
-	cmd := exec.CommandContext(ctx, "bash", script)
+	// Resolve `~` for ergonomics.
+	if strings.HasPrefix(script, "~") {
+		h, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		script = filepath.Join(h, strings.TrimPrefix(script, "~/"))
+	}
+	absScript, err := filepath.Abs(script)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(absScript); err != nil {
+		return fmt.Errorf("installer %s: %w", absScript, err)
+	}
+	log.Infof("[%s] running installer %s", p.Name, absScript)
+	cmd := exec.CommandContext(ctx, "bash", absScript)
 	cmd.Dir = repoDir
 	// Capture output to the log file so failures are diagnosable.
 	pr, pw := io.Pipe()
@@ -313,7 +331,7 @@ func runInstallScript(ctx context.Context, log *logger.Logger, p config.Package,
 		}
 	}()
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("install script exited with error: %w", err)
+		return fmt.Errorf("installer exited with error: %w", err)
 	}
 	return nil
 }
