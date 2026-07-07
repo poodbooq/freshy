@@ -260,18 +260,20 @@ func ensureCloneAndPull(ctx context.Context, log *logger.Logger, p config.Packag
 			log.Warnf("[%s] git fetch failed (%v): %s -- continuing with local refs",
 				p.Name, err, strings.TrimSpace(string(out)))
 		}
-		// Merge ff-only. If rejected, signal via empty SHA + nil err.
-		merge := exec.CommandContext(ctx, "git",
-			"-C", repoDir, "merge", "--ff-only",
-			"FETCH_HEAD")
-		if out, err := merge.CombinedOutput(); err != nil {
-			// Branch might not have changed: treat FETCH_HEAD missing as no-op.
-			if isAlreadyUpToDate(out) {
-				// fall through to HEAD read below
-			} else {
-				log.Warnf("[%s] non-fast-forward: %s", p.Name, strings.TrimSpace(string(out)))
-				return "", nil
-			}
+		// Fast-forward by hard-resetting to FETCH_HEAD. We use
+		// `git reset --hard FETCH_HEAD` rather than
+		// `git merge --ff-only FETCH_HEAD` because shallow clones
+		// (--depth=1) periodically fail the merge with "refusing to
+		// merge unrelated histories" when the fetched commit shares
+		// no local ancestor. Reset is safe here: the clone is owned
+		// entirely by freshy, so any in-tree changes would be
+		// stale artefacts we want to overwrite anyway.
+		reset := exec.CommandContext(ctx, "git",
+			"-C", repoDir, "reset", "--hard", "FETCH_HEAD")
+		if out, err := reset.CombinedOutput(); err != nil {
+			log.Warnf("[%s] reset --hard FETCH_HEAD failed: %s",
+				p.Name, strings.TrimSpace(string(out)))
+			return "", nil
 		}
 	}
 
@@ -281,11 +283,6 @@ func ensureCloneAndPull(ctx context.Context, log *logger.Logger, p config.Packag
 		return "", fmt.Errorf("rev-parse HEAD: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
-}
-
-// isAlreadyUpToDate detects the benign "Already up to date." case.
-func isAlreadyUpToDate(out []byte) bool {
-	return strings.Contains(string(out), "Already up to date")
 }
 
 // runInstaller resolves the package's installer script and executes
