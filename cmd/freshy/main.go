@@ -232,7 +232,12 @@ func installSystemdUnits() error {
 }
 
 func renderUnit(name, body, home string) string {
-	body = strings.ReplaceAll(body, "%h/bin/freshy", filepath.Join(home, "bin", "freshy"))
+	// Path templating is intentionally empty: units should already
+	// carry either `%h`-prefixed paths (preferred; we substitute them
+	// below) or no paths at all. Historically we hardcoded
+	// `%h/bin/freshy` for the binary path; that has since moved to
+	// `%h/.local/bin/freshy` in the units and is rendered by the
+	// generic %h substitution.
 	body = strings.ReplaceAll(body, "%h", home)
 	return body
 }

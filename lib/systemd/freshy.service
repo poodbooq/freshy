@@ -5,6 +5,6 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=%h/bin/freshy sync
+ExecStart=%h/.local/bin/freshy sync
 Environment=HOME=%h
 Nice=10
