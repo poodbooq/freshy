@@ -243,12 +243,11 @@ func ensureCloneAndPull(ctx context.Context, log *logger.Logger, p config.Packag
 	gitDir := filepath.Join(repoDir, ".git")
 	if _, err := os.Stat(gitDir); errors.Is(err, os.ErrNotExist) {
 		log.Infof("[%s] cloning %s", p.Name, p.Repo)
-		cmd := exec.CommandContext(ctx, "git",
-			"clone", "--depth=1", "-b", p.Branch, p.Repo, repoDir)
-		out, err := cmd.CombinedOutput()
+		sha, err := cloneWithFallback(ctx, log, p, repoDir)
 		if err != nil {
-			return "", fmt.Errorf("git clone failed: %w: %s", err, strings.TrimSpace(string(out)))
+			return "", err
 		}
+		return sha, nil
 	} else {
 		log.Infof("[%s] pulling", p.Name)
 		cmd := exec.CommandContext(ctx, "git",
@@ -442,4 +441,57 @@ func shortSHA(s string) string {
 		return s[:7]
 	}
 	return s
+}
+
+// cloneWithFallback tries to clone the repo using the configured branch.
+// If that fails with a "not found" / remote ref error, it retries with
+// the other common default branch (main ↔ master) as a fallback.
+func cloneWithFallback(ctx context.Context, log *logger.Logger, p config.Package, repoDir string) (string, error) {
+	branches := []string{p.Branch}
+	if fb := otherBranch(p.Branch); fb != "" {
+		branches = append(branches, fb)
+	}
+	for i, branch := range branches {
+		if i > 0 {
+			log.Infof("[%s] branch %q not found, retrying with %q", p.Name, branches[i-1], branch)
+		}
+		cmd := exec.CommandContext(ctx, "git",
+			"clone", "--depth=1", "-b", branch, p.Repo, repoDir)
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			return "", nil // cloned; caller reads HEAD SHA
+		}
+		// If there are more branches to try and the error looks like a
+		// remote ref not found, continue; otherwise fail fast.
+		if i < len(branches)-1 && isBranchNotFoundError(string(out)) {
+			// Clean up the partial clone dir so the next attempt starts fresh.
+			os.RemoveAll(repoDir)
+			continue
+		}
+		return "", fmt.Errorf("git clone failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return "", fmt.Errorf("clone failed: all branches exhausted")
+}
+
+// otherBranch returns the opposite common default branch name.
+// If given "main" it returns "master"; if given "master" it returns "main".
+// For any other branch it returns "" (no fallback).
+func otherBranch(branch string) string {
+	switch branch {
+	case "main":
+		return "master"
+	case "master":
+		return "main"
+	default:
+		return ""
+	}
+}
+
+// isBranchNotFoundError checks whether a git error message indicates the
+// remote doesn't have the requested branch (as opposed to a transient
+// network failure or auth error).
+func isBranchNotFoundError(msg string) bool {
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "couldn't find remote ref") ||
+		strings.Contains(lower, "not found") && strings.Contains(lower, "remote")
 }

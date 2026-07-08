@@ -493,7 +493,8 @@ func cmdAdd(args []string) error {
 		return fmt.Errorf("package %q already in config", name)
 	}
 
-	branch := promptOrDefault("branch", "main")
+	defaultBranch := detectDefaultBranch(repo)
+	branch := promptOrDefault("branch", defaultBranch)
 	bins := promptOrDefault("binary names (comma-separated within repo root)", name)
 	binaryList := splitCSV(bins)
 	if len(binaryList) == 0 {
@@ -867,3 +868,28 @@ var _ = json.Marshal
 
 // stub for sort import to keep linters happy even if we move code.
 var _ = sort.Strings
+
+// detectDefaultBranch queries the remote repo's HEAD ref to find its
+// default branch (e.g. "main" or "master"). If detection fails (no git,
+// network error, non-Git URL), it silently returns "main" as a sensible
+// fallback so the prompt still has a default.
+func detectDefaultBranch(repo string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// git ls-remote --symref <repo> HEAD outputs something like:
+	//   ref: refs/heads/main	HEAD
+	//   <sha>	HEAD
+	out, err := exec.CommandContext(ctx, "git",
+		"ls-remote", "--symref", repo, "HEAD",
+	).Output()
+	if err != nil {
+		return "main"
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "ref: refs/heads/") {
+			return strings.TrimPrefix(strings.Fields(line)[1], "refs/heads/")
+		}
+	}
+	return "main"
+}
