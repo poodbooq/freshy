@@ -493,5 +493,6 @@ func otherBranch(branch string) string {
 func isBranchNotFoundError(msg string) bool {
 	lower := strings.ToLower(msg)
 	return strings.Contains(lower, "couldn't find remote ref") ||
+		strings.Contains(lower, "could not find remote branch") ||
 		strings.Contains(lower, "not found") && strings.Contains(lower, "remote")
 }
